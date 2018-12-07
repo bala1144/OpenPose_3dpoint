@@ -24,6 +24,15 @@
     <ClInclude Include="Eigen.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="ReadJson.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ProcessDepth.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Definitons.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

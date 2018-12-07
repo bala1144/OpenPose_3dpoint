@@ -163,9 +163,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Definitons.h" />
     <ClInclude Include="Eigen.h" />
     <ClInclude Include="FreeImageHelper.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="ProcessDepth.h" />
+    <ClInclude Include="ReadJson.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FreeImageHelper.cpp" />
