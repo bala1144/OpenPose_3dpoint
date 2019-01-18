@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+namespace fs = std::experimental::filesystem;
+
 bool ReadJson(const std::string& inputFileName, std::vector<float>& vect)
 {
 	//genereal details
