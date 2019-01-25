@@ -36,6 +36,9 @@
     <ClInclude Include="Visualize_normal_images.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="helper.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">

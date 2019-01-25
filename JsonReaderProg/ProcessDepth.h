@@ -91,8 +91,10 @@ public:
 		//filtering the  background
 		for (auto& v : m_vertices)
 		{
-			if( v[2] < 3.3f /* && v[0] < 0.95f && v[0] > -0.95f && v[1] < 0.92f*/ )
-			m_preprocessed_vertices.push_back(v);
+			if (v[2] < 3.3f /* && v[0] < 0.95f && v[0] > -0.95f && v[1] < 0.92f*/)
+				m_preprocessed_vertices.push_back(v);
+			else
+				m_preprocessed_vertices.push_back(Vector4f(MINF, MINF, MINF, MINF));
 		}
 			
 	}
@@ -108,28 +110,38 @@ public:
 		{
 			for (unsigned int x = 1; x < m_depthImageWidth - 1; ++x)
 			{
-				id = x  + y * m_depthImageWidth;
-				R = (x+1) + y * m_depthImageWidth;
-				L = (x-1) + y * m_depthImageWidth;
-				B = x + ( ( y + 1) * m_depthImageWidth);
-				T = x + ( (y -1)  *  m_depthImageWidth);
+				id = x + y * m_depthImageWidth;
+				R = (x + 1) + y * m_depthImageWidth;
+				L = (x - 1) + y * m_depthImageWidth;
+				B = x + ((y + 1) * m_depthImageWidth);
+				T = x + ((y - 1)  *  m_depthImageWidth);
 
 				float dzdx = (m_depthFrame[R] - m_depthFrame[L]) / 2.0;
 				float dzdy = (m_depthFrame[B] - m_depthFrame[T]) / 2.0;
-				
+
 				Vector3f n = Vector3f(-m_f_x * dzdx, -m_f_x * dzdy, 1.0f);
 
 				m_normals[id] = n.normalized();
+
+				//if (m_depthFrame[id] == MINF)
+				//{
+				//	m_normals[id] = Vector3f(MINF, MINF, MINF);
+				//}
+				//else
+				//{
+				//	float dzdx = (m_depthFrame[R] - m_depthFrame[L]) / 2.0;
+				//	float dzdy = (m_depthFrame[B] - m_depthFrame[T]) / 2.0;
+
+				//	Vector3f n = Vector3f(-m_f_x * dzdx, -m_f_x * dzdy, 1.0f);
+
+				//	m_normals[id] = n.normalized();
+				//}
+
 			}
 		}
-
-		//visualize the normals
-		//normal_visualize(m_normals,m_depthImageWidth);
-
-
 	}
 
-	 void Extract3Djoints(float& x,float& y, std::vector<Vector4f>& Q_in_3D)
+	 void Extract3Djoints(int& x,int& y, std::vector<Vector4f>& Q_in_3D)
 	{
 		//std::vector<Vector4f> Q_in_3D; order-> q11,q12,q21,q22
 		unsigned int id;
@@ -142,69 +154,113 @@ public:
 		id =( y+1) + (x + 1) * m_depthImageHeight;//q22
 		Q_in_3D.push_back(m_vertices.at(id));
 		
+		//
+		////for debugging
+		//for (auto& v : Q_in_3D)
+		//{
+		//	std::cout << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+		//}
 		
-		//for debugging
-		for (auto& v : Q_in_3D)
-		{
-			std::cout << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+	}
+
+	 Eigen::Vector3f colour_to_depth_plane(float& x, float& y)
+	 {
+		 m_depthIntrinsics
+			 << m_f_x, 0.0f, m_c_x,
+			 0.0f, m_f_y, m_c_y,
+			 0.0f, 0.0f, 1.0f;
+
+		 m_colourIntrinsics <<	m_col_f_x, 0.0f, m_col_c_x,
+								0.0f, m_col_f_y, m_col_c_y,
+								0.0f, 0.0f, 1.0f;
+
+		 Eigen::Vector3f depth_index = m_depthIntrinsics * m_colourIntrinsics.inverse() * Vector3f(x ,y , 1.0f);
+		 	 
+		 return (depth_index);
+	 }
+
+	bool Bilinear_interpolation_joint(std::vector<float>& Joint2D)
+	{
+		std::vector<Vector4f> Q_in_3D;
+		//2d Point = Joint2D.at(0),Joint2D.at(1)
+		float x, y;
+		int q11x, q11y, q22x, q22y, q12x, q12y, q21x, q21y;
+		Eigen::Vector4f b;
+		Eigen::Matrix4f A;
+		Eigen::Vector4f X, interpolated_3d;
+		Eigen::Vector3f v_idx;
+
+		for (int id = 0; id < Joint2D.size() / 3; id++)
+		{ 
+			x = Joint2D.at( id * 3);
+			y = Joint2D.at( (id * 3) + 1 );
+			
+			std::cout << "2D Joints idx in colour image " << x << " " << y << std::endl;
+			
+			v_idx = colour_to_depth_plane(x, y);
+			
+			x = v_idx[0] / v_idx[2];
+			y = v_idx[1] / v_idx[2];
+
+			std::cout << "2D Joints idx in depth image" << x << " " << y << std::endl;
+
+
+			q11x = std::floor(x);
+			q11y = std::floor(y);
+	
+			q22x = q11x + 1;
+			q22y = q11y + 1;
+		
+			q12x = q11x;
+			q12y = q11y + 1;
+		
+			q21x = q11x + 1;
+			q21y = q11y;
+
+			std::cout << "q11 " << q11x << " " << q11y << std::endl;
+			std::cout << "q12 " << q12x << " " << q12y << std::endl;
+			std::cout << "q21 " << q21x << " " << q21y << std::endl;
+			std::cout << "q22 " << q22x << " " << q22y << std::endl;
+
+			//extract the corresponding 3d points from the depth 
+			Extract3Djoints(q11x, q11y, Q_in_3D);
+			
+			//using closed form linear solution from https://en.wikipedia.org/wiki/Bilinear_interpolation
+			A << 1.0,	 q11x,		q11y,		q11x * q11y ,
+				 1.0,	 q11x,		q11y+1,		q11x * q12y ,
+				 1.0,	 q11x +1,	q11y,		q12x * q11y ,
+				 1.0,	 q11x+1,	q11y + 1,	q22x * q22y ;
+
+			X = Vector4f(1.0, x, y, x*y);
+			b = A.inverse().transpose() * X;
+
+			//std::cout << " bi  = " << std::endl << b << std::endl;
+			interpolated_3d = b[0] * Q_in_3D.at(0) + b[1] * Q_in_3D.at(1) + b[2] * Q_in_3D.at(2) + b[3] * Q_in_3D.at(3);
+			m_open_pose_joints.push_back(interpolated_3d);
+			std::cout << " interpolated 3d  = " << std::endl << interpolated_3d << std::endl;
+
 		}
-		
+
+		std::cout << " numkber of interpolated 3d joints = " << m_open_pose_joints.size() << std::endl;
+		Dump_open_pose_joints_obj();
+		//Linear interpolation in y direction
+		return true;
 
 	}
 
-	//bool Bilinear_interpolation_joint(std::vector<float>& Joint2D)
-	//{
-	//	std::vector<Vector4f> Q_in_3D;
-	//	//2d Point = Joint2D.at(0),Joint2D.at(1)
-	//	std::cout << "2D Joints are " << Joint2D.at(0) << " " << Joint2D.at(1) << std::endl;
-	//	
-	//	float x = Joint2D.at(3);
-	//	float y = Joint2D.at(4);
-	//	
-	//	float q11x = std::floor(Joint2D.at(3));
-	//	float q11y = std::floor(Joint2D.at(4));
-	//
-	//	float q22x = q11x + 1;
-	//	float q22y = q11y + 1;
-	//	
-	//	float q12x = q11x;
-	//	float q12y = q11y + 1;
-	//	
-	//	float q21x = q11x + 1;
-	//	float q21y = q11y;
+	bool Dump_open_pose_joints_obj()
+	{
+		++m_currentIdx;
+		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + "_joints_.obj"), std::ios::out);
+		for (auto& v : m_open_pose_joints)
+		{
+			if (v[0] != MINF && v[1] != MINF && v[2] != MINF)// if you add minf you cant visualize it in mesh lab 
+				file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+		}
+		file.close();
+		return true;
+	}
 
-	//	std::cout << "q11 " << q11x << " " << q11y << std::endl;
-	//	std::cout << "q12 " << q12x << " " << q12y << std::endl;
-	//	std::cout << "q21 " << q21x << " " << q21y << std::endl;
-	//	std::cout << "q22 " << q22x << " " << q22y << std::endl;
-
-	//	//extract the corresponding 3d points from the depth 
-	//	Extract3Djoints(q11x, q11y, Q_in_3D);
-
-	//	
-	//	//using closed form linear solution from https://en.wikipedia.org/wiki/Bilinear_interpolation
-	//	Eigen::Vector4f b;
-	//	Eigen::Matrix4f A;
-	//	A << 1.0,	 q11x,		q11y,		q11x * q11y ,
-	//		 1.0,	 q11x,		q11y+1,		q11x * q12y ,
-	//		 1.0,	 q11x +1,	q11y,		q12x * q11y ,
-	//		 1.0,	 q11x+1,	q11y + 1,	q22x * q22y ;
-
-	//	Eigen::Vector4f X = Vector4f(1.0, x, y, x*y);
-
-	//	b = A.inverse().transpose() * X;
-
-	//	std::cout << " bi  = " << std::endl << b << std::endl;
-
-	//	Eigen::Vector4f interpolated_3d = b[0] * Q_in_3D.at(0) + b[1] * Q_in_3D.at(1) + b[2] * Q_in_3D.at(2) + b[3] * Q_in_3D.at(3);
-	//	std::cout << " interpolated 3d  = " << std::endl << interpolated_3d << std::endl;
-
-	//	//Linear interpolation in y direction
-	//	
-
-	//	return true;
-
-	//}
 
 	bool Dump_pointcloud_obj()
 	{
@@ -219,30 +275,46 @@ public:
 		return true;
 	}
 
-	bool Dump_normals_obj()
+	bool Dump_pointcloud_off()
 	{
 		++m_currentIdx;
-		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + "_normals.obj"), std::ios::out);
+		std::ofstream file( (m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + ".off") , std::ios::out);
 		for (auto& v : m_preprocessed_vertices)
 		{
-			if (v[0] != MINF) // if you add minf you cant visualize it in mesh lab 
-				file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
-		}
-		file.close();
-		return true;
-	}
-
-	bool Dump_off()
-	{
-		std::ofstream file( (m_3dframes_Dir + m_file_name+ ".off") , std::ios::out);
-		for (auto& v : m_vertices)
-		{
+			//if (v[0] != MINF) // if you add minf you cant visualize it in mesh lab 
 			file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
 		}
 		file.close();
 		return true;
 	}
 
+	bool Dump_normals_obj()
+	{
+		++m_currentIdx;
+		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + "_normals.obj"), std::ios::out);
+		for (auto& v : m_normals)
+		{
+			if (v[0] != MINF && v[1] != MINF && v[2] != MINF) // if you add minf you cant visualize it in mesh lab 
+				file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+		}
+		file.close();
+		return true;
+	}
+	
+	bool Dump_normals_off()
+	{
+		++m_currentIdx;
+		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + "_normals.off"), std::ios::out);
+		for (auto& v : m_normals)
+		{
+			//if (v[0] != MINF) // if you add minf you cant visualize it in mesh lab 
+			file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+		}
+		file.close();
+		return true;
+	}
+
+	
 	
 private:
 
@@ -254,13 +326,25 @@ private:
 	unsigned int m_depthImageWidth =  640 ;
 	unsigned int m_depthImageHeight = 480 ;
 	float* m_depthFrame = new float[m_depthImageWidth*m_depthImageHeight];
-	//Eigen::Matrix3f m_depthIntrinsics;
+	Eigen::Matrix3f m_depthIntrinsics;
+	Eigen::Matrix3f m_colourIntrinsics;
 	//Eigen::Matrix4f m_depthExtrinsics;
+
+	//depth intrinsics param
 	float m_f_x = 576.353f;
 	float m_f_y = 576.057f;
 	float m_c_x = 319.85f;
 	float m_c_y = 240.632f;
+
+	//color intrinsics param
+	float m_col_f_x = 1161.04f;
+	float m_col_f_y = 1161.72f;
+	float m_col_c_x = 648.21f;
+	float m_col_c_y = 485.785f;
+	
+
 	std::vector<Vector4f> m_vertices;
 	std::vector<Vector4f> m_preprocessed_vertices;
 	std::vector<Vector3f> m_normals;
+	std::vector<Vector4f> m_open_pose_joints;
 };
