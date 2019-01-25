@@ -8,6 +8,7 @@
 #include <cmath>
 #include "Eigen.h"
 #include "FreeImageHelper.h"
+#include "Visualize_normal_images.h"
 
 class DepthProcess {
 public:
@@ -102,14 +103,6 @@ public:
 	*/
 	void compute_normal_image()
 	{
-		
-		//float dzdx = (depth.at<float>(x + 1, y) - depth.at<float>(x - 1, y)) / 2.0;
-		//float dzdy = (depth.at<float>(x, y + 1) - depth.at<float>(x, y - 1)) / 2.0;
-
-		//Vec3f d(-dzdx, -dzdy, 1.0f);
-		//Vec3f n = normalize(d);
-
-		//normals.at<Vec3f>(x, y) = n;
 		unsigned int id, R, L, B, T;
 		for (unsigned int y = 1; y < m_depthImageHeight - 1; ++y)
 		{
@@ -124,11 +117,16 @@ public:
 				float dzdx = (m_depthFrame[R] - m_depthFrame[L]) / 2.0;
 				float dzdy = (m_depthFrame[B] - m_depthFrame[T]) / 2.0;
 				
-				Vector3f n = Vector3f(-dzdx, -dzdy, 1.0f);
+				Vector3f n = Vector3f(-m_f_x * dzdx, -m_f_x * dzdy, 1.0f);
 
 				m_normals[id] = n.normalized();
 			}
 		}
+
+		//visualize the normals
+		//normal_visualize(m_normals,m_depthImageWidth);
+
+
 	}
 
 	 void Extract3Djoints(float& x,float& y, std::vector<Vector4f>& Q_in_3D)
@@ -211,7 +209,7 @@ public:
 	bool Dump_pointcloud_obj()
 	{
 		++m_currentIdx;
-		std::ofstream file( (m_3dframes_Dir + m_file_name.substr(0,-4)+ ".obj") , std::ios::out);
+		std::ofstream file( (m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + ".obj") , std::ios::out);
 		for (auto& v : m_preprocessed_vertices)
 		{
 			if (v[0] != MINF) // if you add minf you cant visualize it in mesh lab 
@@ -224,7 +222,7 @@ public:
 	bool Dump_normals_obj()
 	{
 		++m_currentIdx;
-		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, -4) + "_normals.obj"), std::ios::out);
+		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + "_normals.obj"), std::ios::out);
 		for (auto& v : m_preprocessed_vertices)
 		{
 			if (v[0] != MINF) // if you add minf you cant visualize it in mesh lab 
