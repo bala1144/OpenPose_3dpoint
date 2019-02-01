@@ -145,15 +145,15 @@ public:
 	{
 		//std::vector<Vector4f> Q_in_3D; order-> q11,q12,q21,q22
 		unsigned int id;
-		id =int( y + x * m_depthImageHeight);//q11
-		Q_in_3D.push_back(m_vertices.at(id));
-		id =( y+1) + x * m_depthImageHeight;//q12
-		Q_in_3D.push_back(m_vertices.at(id));
-		id = y + (x+1) * m_depthImageHeight;//q21
-		Q_in_3D.push_back(m_vertices.at(id));
-		id =( y+1) + (x + 1) * m_depthImageHeight;//q22
-		Q_in_3D.push_back(m_vertices.at(id));
-		
+		id = x + y * m_depthImageWidth;//q11
+		Q_in_3D.push_back(m_preprocessed_vertices.at(id));
+		id = x + ( y +1) * m_depthImageWidth;//q12
+		Q_in_3D.push_back(m_preprocessed_vertices.at(id));
+		id = ( x + 1)  + y * m_depthImageWidth;;//q21
+		Q_in_3D.push_back(m_preprocessed_vertices.at(id));
+		id = ( x +1 ) + ( y + 1 ) * m_depthImageWidth;//q22
+		Q_in_3D.push_back(m_preprocessed_vertices.at(id));
+		 
 		//
 		////for debugging
 		//for (auto& v : Q_in_3D)
@@ -179,69 +179,128 @@ public:
 		 return (depth_index);
 	 }
 
-	bool Bilinear_interpolation_joint(std::vector<float>& Joint2D)
-	{
-		std::vector<Vector4f> Q_in_3D;
-		//2d Point = Joint2D.at(0),Joint2D.at(1)
-		float x, y;
-		int q11x, q11y, q22x, q22y, q12x, q12y, q21x, q21y;
-		Eigen::Vector4f b;
-		Eigen::Matrix4f A;
-		Eigen::Vector4f X, interpolated_3d;
-		Eigen::Vector3f v_idx;
+	 void handle_MINF_pixels(Eigen::Vector4f& b, std::vector<Vector4f>& Q_in_3D, Eigen::Vector4f& interpolated_3d) {
 
-		for (int id = 0; id < Joint2D.size() / 3; id++)
-		{ 
-			x = Joint2D.at( id * 3);
-			y = Joint2D.at( (id * 3) + 1 );
-			
-			std::cout << "2D Joints idx in colour image " << x << " " << y << std::endl;
-			
-			v_idx = colour_to_depth_plane(x, y);
-			
-			x = v_idx[0] / v_idx[2];
-			y = v_idx[1] / v_idx[2];
+		 //convert to array
+		 constexpr int SIZE = 4;
+		 std::pair<float, int> arr[SIZE] = { { b[0], 0 }, { b[1], 1 }, { b[2], 2 }, { b[3], 3} };
+		 std::sort(arr, arr + SIZE, std::greater<>() );
+		 Vector4f curr_vec;
 
-			std::cout << "2D Joints idx in depth image" << x << " " << y << std::endl;
+		 for (auto& v : arr)
+		 {
+			 curr_vec = Q_in_3D[v.second];
+			 if (curr_vec[0] != MINF && curr_vec[2] != MINF && curr_vec[2] != MINF)
+			 {
+				 interpolated_3d = curr_vec;
+				 std::cout << " nearest vector is " << interpolated_3d[0] << " " << interpolated_3d[1] << " " << interpolated_3d[2] << " " << std::endl;
+				 break;
+			 }
+		 }
+	 }
+
+	 bool Bilinear_interpolation_joint(std::vector<float>& Joint2D)
+	 {
+		 std::vector<Vector4f> Q_in_3D;
+		 //2d Point = Joint2D.at(0),Joint2D.at(1)
+		 float x, y;
+		 int q11x, q11y, q22x, q22y, q12x, q12y, q21x, q21y;
+		 Eigen::Vector4f b;
+		 Eigen::Matrix4f A;
+		 Eigen::Vector4f X, interpolated_3d;
+		 Eigen::Vector3f v_idx;
+		 m_open_pose_joints.clear();
+		 
+		 //for (int id = 0; id <  5 ; id++)
+		 for (int id = 0; id < Joint2D.size() / 3; id++)
+		 {
+			 x = Joint2D.at(id * 3);
+			 y = Joint2D.at((id * 3) + 1);
+
+			 std::cout << "2D Joints idx in colour image " << x << " " << y << std::endl;
+
+			 v_idx = colour_to_depth_plane(x, y);
+
+			 x = v_idx[0] / v_idx[2];
+			 y = v_idx[1] / v_idx[2];
+
+			 std::cout << "2D Joints idx in depth image" << x << " " << y << std::endl;
 
 
-			q11x = std::floor(x);
-			q11y = std::floor(y);
-	
-			q22x = q11x + 1;
-			q22y = q11y + 1;
-		
-			q12x = q11x;
-			q12y = q11y + 1;
-		
-			q21x = q11x + 1;
-			q21y = q11y;
+			 q11x = std::floor(x);
+			 q11y = std::floor(y);
 
-			std::cout << "q11 " << q11x << " " << q11y << std::endl;
-			std::cout << "q12 " << q12x << " " << q12y << std::endl;
-			std::cout << "q21 " << q21x << " " << q21y << std::endl;
-			std::cout << "q22 " << q22x << " " << q22y << std::endl;
+			 q22x = q11x + 1;
+			 q22y = q11y + 1;
 
-			//extract the corresponding 3d points from the depth 
-			Extract3Djoints(q11x, q11y, Q_in_3D);
-			
-			//using closed form linear solution from https://en.wikipedia.org/wiki/Bilinear_interpolation
-			A << 1.0,	 q11x,		q11y,		q11x * q11y ,
-				 1.0,	 q11x,		q11y+1,		q11x * q12y ,
-				 1.0,	 q11x +1,	q11y,		q12x * q11y ,
-				 1.0,	 q11x+1,	q11y + 1,	q22x * q22y ;
+			 q12x = q11x;
+			 q12y = q11y + 1;
 
-			X = Vector4f(1.0, x, y, x*y);
-			b = A.inverse().transpose() * X;
+			 q21x = q11x + 1;
+			 q21y = q11y;
 
-			//std::cout << " bi  = " << std::endl << b << std::endl;
-			interpolated_3d = b[0] * Q_in_3D.at(0) + b[1] * Q_in_3D.at(1) + b[2] * Q_in_3D.at(2) + b[3] * Q_in_3D.at(3);
-			m_open_pose_joints.push_back(interpolated_3d);
-			std::cout << " interpolated 3d  = " << std::endl << interpolated_3d << std::endl;
+			 //std::cout << "q11 " << q11x << " " << q11y << std::endl;
+			 //std::cout << "q12 " << q12x << " " << q12y << std::endl;
+			 //std::cout << "q21 " << q21x << " " << q21y << std::endl;
+			 //std::cout << "q22 " << q22x << " " << q22y << std::endl;
 
+			 //extract the corresponding 3d points from the depth 
+			 Q_in_3D.clear();
+			 if (Q_in_3D.empty())
+				 Extract3Djoints(q11x, q11y, Q_in_3D);
+			 else {
+				 std::cout << " error : vector is not empty" << std::endl;
+				 break;
+			 }
+			 
+			 std::cout << "neighbouring points in 3d   = " << std::endl;
+			 for (auto& v : Q_in_3D)
+			 {
+				 //if (v[0] != MINF && v[1] != MINF && v[2] != MINF)// if you add minf you cant visualize it in mesh lab 
+					 std::cout << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+					 //m_open_pose_joints.push_back(v);
+			 }
+
+
+
+			 //using closed form linear solution from https://en.wikipedia.org/wiki/Bilinear_interpolation
+			 A << 1.0, q11x, q11y, q11x * q11y,
+				 1.0, q11x, q11y + 1, q11x * q12y,
+				 1.0, q11x + 1, q11y, q12x * q11y,
+				 1.0, q11x + 1, q11y + 1, q22x * q22y;
+
+			 X = Vector4f(1.0, x, y, x*y);
+			 b = A.inverse().transpose() * X;
+
+			 //std::cout << " bi  = " << std::endl << b << std::endl;
+			 std::cout << "Interpolation coefficients   = " << b[0] << " " << b[1] << " " << b[2] << " " << b[3] << " " << std::endl;
+			 interpolated_3d = b[0] * Q_in_3D.at(0) + b[1] * Q_in_3D.at(1) + b[2] * Q_in_3D.at(2) + b[3] * Q_in_3D.at(3);
+
+			 std::cout << " interpolated 3d  = " << interpolated_3d[0] << " " << interpolated_3d[1] << " " << interpolated_3d[2] << std::endl;
+			 
+
+			 if ( interpolated_3d[0] != MINF && interpolated_3d[1] != MINF && interpolated_3d[2] != MINF &&
+				 isnan(interpolated_3d[0]) == false && isnan(interpolated_3d[1]) == false && isnan(interpolated_3d[2]) == false) {
+				 //pushing the interpolated joints
+				 m_open_pose_joints.push_back(interpolated_3d);
+			 }
+			 else{
+				interpolated_3d = Vector4f(MINF, MINF, MINF, MINF);
+ 				handle_MINF_pixels(b,Q_in_3D, interpolated_3d);
+				m_open_pose_joints.push_back(interpolated_3d);
+			 }
+
+			//m_open_pose_joints.push_back(Q_in_3D.at(0));
+			std::cout << "MINF interpolated 3d  = " << interpolated_3d[0] << " " << interpolated_3d[1]<< " " << interpolated_3d[2]  << std::endl << std::endl;
 		}
 
 		std::cout << " numkber of interpolated 3d joints = " << m_open_pose_joints.size() << std::endl;
+		for (auto& v : m_open_pose_joints)
+		{
+			if (v[0] != MINF && v[1] != MINF && v[2] != MINF)// if you add minf you cant visualize it in mesh lab 
+			std::cout << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+		}
+
 		Dump_open_pose_joints_obj();
 		//Linear interpolation in y direction
 		return true;
@@ -256,6 +315,8 @@ public:
 		{
 			if (v[0] != MINF && v[1] != MINF && v[2] != MINF)// if you add minf you cant visualize it in mesh lab 
 				file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+			else
+				file << "v " << 0.0f << " " << 0.0f << " " << 0.0f << "\n";
 		}
 		file.close();
 		return true;
