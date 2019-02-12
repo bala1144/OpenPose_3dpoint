@@ -145,6 +145,7 @@ public:
 	{
 		//std::vector<Vector4f> Q_in_3D; order-> q11,q12,q21,q22
 		unsigned int id;
+		id = x + y * m_depthImageWidth;
 		id = x + y * m_depthImageWidth;//q11
 		Q_in_3D.push_back(m_preprocessed_vertices.at(id));
 		id = x + ( y +1) * m_depthImageWidth;//q12
