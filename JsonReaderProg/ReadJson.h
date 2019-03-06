@@ -7,7 +7,7 @@
 
 namespace fs = std::experimental::filesystem;
 
-bool ReadJson(const std::string& inputFileName, std::vector<float>& vect)
+bool ReadJson(const std::string inputFileName, std::vector<float>& vect)
 {
 	//genereal details
 	// need to implement the faulty cases, if keys are not part of the string
