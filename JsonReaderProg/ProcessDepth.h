@@ -108,17 +108,25 @@ public:
 			for (unsigned int x = 1; x < m_depthImageWidth - 1; ++x)
 			{
 				id = x + y * m_depthImageWidth;
-				R = (x + 1) + y * m_depthImageWidth;
-				L = (x - 1) + y * m_depthImageWidth;
-				B = x + ((y + 1) * m_depthImageWidth);
-				T = x + ((y - 1)  *  m_depthImageWidth);
+				R = id + 1;
+				L = id - 1;
+				B = id + m_depthImageWidth;
+				T = id - m_depthImageWidth;
 
-				float dzdx = (m_depthFrame[R] - m_depthFrame[L]) / 2.0;
-				float dzdy = (m_depthFrame[B] - m_depthFrame[T]) / 2.0;
+				//float dzdx = (m_depthFrame[R] - m_depthFrame[L]) / 2.0;
+				//float dzdy = (m_depthFrame[B] - m_depthFrame[T]) / 2.0;
+				
+				Vector3f dzdx = (m_vertices[L] - m_vertices[R]).head(3);
+				Vector3f dzdy = (m_vertices[B] - m_vertices[T]).head(3);
+		
+				Vector3f n = dzdx.cross(dzdy);
+		
 
-				Vector3f n = Vector3f(-m_f_x * dzdx, -m_f_x * dzdy, 1.0f);
+				//Vector3f n = Vector3f(-m_f_x * dzdx, -m_f_x * dzdy, 1.0f);
+				//Vector3f n = Vector3f(-dzdy, -dzdx, 1.0f);
 
 				m_normals[id] = n.normalized();
+				//m_normals[id] = n;
 
 				//if (m_depthFrame[id] == MINF)
 				//{
@@ -128,12 +136,9 @@ public:
 				//{
 				//	float dzdx = (m_depthFrame[R] - m_depthFrame[L]) / 2.0;
 				//	float dzdy = (m_depthFrame[B] - m_depthFrame[T]) / 2.0;
-
 				//	Vector3f n = Vector3f(-m_f_x * dzdx, -m_f_x * dzdy, 1.0f);
-
 				//	m_normals[id] = n.normalized();
 				//}
-
 			}
 		}
 	}
@@ -142,7 +147,7 @@ public:
 	{
 		//std::vector<Vector4f> Q_in_3D; order-> q11,q12,q21,q22
 		unsigned int id;
-		id = x + y * m_depthImageWidth;
+		//id = x + y * m_depthImageWidth;
 		id = x + y * m_depthImageWidth;//q11
 		Q_in_3D.push_back(m_preprocessed_vertices.at(id));
 		id = x + ( y +1) * m_depthImageWidth;//q12
@@ -152,12 +157,6 @@ public:
 		id = ( x +1 ) + ( y + 1 ) * m_depthImageWidth;//q22
 		Q_in_3D.push_back(m_preprocessed_vertices.at(id));
 		 
-		//
-		////for debugging
-		//for (auto& v : Q_in_3D)
-		//{
-		//	std::cout << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
-		//}
 		
 	}
 
@@ -345,11 +344,14 @@ public:
 	bool Dump_pointcloud_off()
 	{
 		++m_currentIdx;
-		std::ofstream file( (m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + ".off") , std::ios::out);
+		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + ".off"), std::ios::out);
 		for (auto& v : m_preprocessed_vertices)
 		{
-			//if (v[0] != MINF) // if you add minf you cant visualize it in mesh lab 
+			if ( (v[0] != MINF && v[1] != MINF && v[2] != MINF) /*||
+				( isnan(v[0]) == true && isnan(v[1]) == true && isnan(v[2]) == true)*/ ) // if you add minf you cant visualize it in mesh lab 
 			file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+			else 
+				file << "v " << 0.0f << " " << 0.0f << " " << 0.0f << "\n";
 		}
 		file.close();
 		return true;
@@ -361,7 +363,8 @@ public:
 		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + "_normals.obj"), std::ios::out);
 		for (auto& v : m_normals)
 		{
-			if (v[0] != MINF && v[1] != MINF && v[2] != MINF) // if you add minf you cant visualize it in mesh lab 
+			if (v[0] != MINF && v[1] != MINF && v[2] != MINF &&
+				isnan(v[0]) == false && isnan(v[1]) == false && isnan(v[2]) == false) // if you add minf you cant visualize it in mesh lab 
 				file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
 		}
 		file.close();
