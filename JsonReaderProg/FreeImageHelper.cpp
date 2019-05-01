@@ -348,9 +348,35 @@ bool FreeImageU16F::LoadImageFromFile(const std::string& filename, unsigned int 
 	if (fif == FIF_UNKNOWN) return false;
 
 	//check that the plugin has reading capabilities and load the file
-	if (FreeImage_FIFSupportsReading(fif)) dib = FreeImage_Load(fif, filename.c_str());
+	if (FreeImage_FIFSupportsReading(fif)) 
+		dib = FreeImage_Load(fif, filename.c_str());
+	//if (!dib) throw std::exception("Could not load image: " + filename);
 	if (!dib) return false;
+	FREE_IMAGE_TYPE fitype = FreeImage_GetImageType(dib);
 
+
+	if (fitype == FIT_FLOAT) {
+		std::cout << "Loading as FIT_FLOAT " << fitype << std::endl;
+		BYTE* bits;
+		bits = FreeImage_GetBits(dib);
+		unsigned int width = FreeImage_GetWidth(dib);
+		unsigned int height = FreeImage_GetHeight(dib);
+		unsigned int nBits = FreeImage_GetBPP(dib);
+		unsigned int pitch = FreeImage_GetPitch(dib);
+		float *tempdata = (float *)bits;
+		unsigned int bytesPerPixel = nBits / 8;
+		data = new float[width * height];
+		for (unsigned int y = 0; y < height; y++) {
+			for (unsigned int x = 0; x < width; x++) {
+				int idx_out = x + (height - 1 - y) * width;
+				int idx_in = y * width + x;
+				data[idx_out] = tempdata[idx_in];
+			}
+		}
+	}
+	else{
+
+		std::cout << "Loading as not FIT_FLOAT" << fitype << std::endl;
 
 	// Convert to grey float images
 	{
@@ -396,6 +422,7 @@ bool FreeImageU16F::LoadImageFromFile(const std::string& filename, unsigned int 
 		}
 	}
 
+	}
 	//Free FreeImage's copy of the data
 	FreeImage_Unload(dib);
 

@@ -12,11 +12,10 @@
 
 class DepthProcess {
 public:
+	std::string m_3dframes_Dir;
 	DepthProcess(){
-		for (unsigned int i = 0; i < m_depthImageWidth*m_depthImageHeight; ++i)
-		{
-			m_normals.push_back(Vector3f(MINF,MINF,MINF));
-		}
+
+
 		
 	}
 
@@ -26,13 +25,23 @@ public:
 		//file_path = p.path().string();
 		m_file_name = file_name;
 		file_path = file_path + +"\\" + file_name;
+		//std::cout << "Full file path " << file_path << std::endl;
+
 		std::ifstream ifs(file_path, std::ios::in);
 		if (!ifs) {
 			std::cout << "*ERROR** Could not read input file " << file_path << "\n";
 			return false;
 		}
 		FreeImageU16F dImage;
+		//FreeImageB dImage;
 		dImage.LoadImageFromFile(file_path);
+
+		//delete all the data from the previous frames
+		m_vertices.clear();
+		m_preprocessed_vertices.clear();
+		m_normals.clear();
+		m_open_pose_joints.clear();
+
 
 		for (unsigned int i = 0; i < m_depthImageWidth*m_depthImageHeight; ++i)
 		{
@@ -40,8 +49,8 @@ public:
 				m_depthFrame[i] = MINF;
 			else
 			{
-				m_depthFrame[i] = dImage.data[i] * 1.0f / 1000.0f;
-				//m_depthFrame[i] = 1.0f / (dImage.data[i] * -0.0030711016 + 3.3309495161);;
+				m_depthFrame[i] = dImage.data[i] * 1.0f / 1000.0f;; //for real data
+				//m_depthFrame[i] = dImage.data[i] * 1.0f; // for synthetic data
 				//std::cout << m_depthFrame[i] << std::endl;
 			}
 
@@ -85,6 +94,9 @@ public:
 	*/
 	void preprocess_point_cloud()
 	{
+		////used for synthetic preprocessing
+		//m_preprocessed_vertices = m_vertices;
+		
 		//filtering the  background
 		for (auto& v : m_vertices)
 		{
@@ -102,6 +114,12 @@ public:
 	*/
 	void compute_normal_image()
 	{
+		//create the normal vector with the same number of elements as the image size
+		for (unsigned int i = 0; i < m_depthImageWidth*m_depthImageHeight; ++i)
+		{
+			m_normals.push_back(Vector3f(MINF, MINF, MINF));
+		}
+
 		unsigned int id, R, L, B, T;
 		for (unsigned int y = 1; y < m_depthImageHeight - 1; ++y)
 		{
@@ -116,8 +134,8 @@ public:
 				//float dzdx = (m_depthFrame[R] - m_depthFrame[L]) / 2.0;
 				//float dzdy = (m_depthFrame[B] - m_depthFrame[T]) / 2.0;
 				
-				Vector3f dzdx = (m_vertices[L] - m_vertices[R]).head(3);
-				Vector3f dzdy = (m_vertices[B] - m_vertices[T]).head(3);
+				Vector3f dzdx = (m_preprocessed_vertices[L] - m_preprocessed_vertices[R]).head(3);
+				Vector3f dzdy = (m_preprocessed_vertices[B] - m_preprocessed_vertices[T]).head(3);
 		
 				Vector3f n = dzdx.cross(dzdy);
 		
@@ -299,7 +317,7 @@ public:
 			 }
 		}
 
-		std::cout << " numkber of interpolated 3d joints = " << m_open_pose_joints.size() << std::endl;
+		std::cout << " number of interpolated 3d joints = " << m_open_pose_joints.size() << std::endl;
 		int i = 0;
 		for (auto& v : m_open_pose_joints)
 		{
@@ -329,13 +347,16 @@ public:
 	}
 
 	bool Dump_pointcloud_obj()
-	{
-		++m_currentIdx;
-		std::ofstream file( (m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + ".obj") , std::ios::out);
+	{		
+		std::string path = (m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + ".obj");
+		std::ofstream file(path, std::ios::out);
+		std::cout << "Generating point cloud in file " << path << std::endl;
 		for (auto& v : m_preprocessed_vertices)
 		{
-			if (v[0] != MINF) // if you add minf you cant visualize it in mesh lab 
-			file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+			if ((v[0] != MINF && v[1] != MINF && v[2] != MINF))
+				file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+			else
+				file << "v " << 0.0f << " " << 0.0f << " " << 0.0f << "\n";
 		}
 		file.close();
 		return true;
@@ -359,12 +380,14 @@ public:
 
 	bool Dump_normals_obj()
 	{
-		++m_currentIdx;
 		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + "_normals.obj"), std::ios::out);
 		for (auto& v : m_normals)
 		{
-			if (v[0] != MINF && v[1] != MINF && v[2] != MINF &&
-				isnan(v[0]) == false && isnan(v[1]) == false && isnan(v[2]) == false) // if you add minf you cant visualize it in mesh lab 
+			if ((v[0] == MINF && v[1] == MINF && v[2] == MINF))
+				file << "v " << 0.0f << " " << 0.0f << " " << 0.0f << "\n";
+			else if (isnan(v[0]) == true || isnan(v[1]) == true || isnan(v[2]) == true)//NAN
+				file << "v " << 0.0f << " " << 0.0f << " " << 0.0f << "\n";
+			else 
 				file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
 		}
 		file.close();
@@ -377,8 +400,10 @@ public:
 		std::ofstream file((m_3dframes_Dir + m_file_name.substr(0, m_file_name.find(".pgm")) + "_normals.off"), std::ios::out);
 		for (auto& v : m_normals)
 		{
-			//if (v[0] != MINF) // if you add minf you cant visualize it in mesh lab 
-			file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+			if ((v[0] != MINF && v[1] != MINF && v[2] != MINF))
+				file << "v " << v[0] << " " << v[1] << " " << v[2] << "\n";
+			else
+				file << "v " << 0.0f << " " << 0.0f << " " << 0.0f << "\n";
 		}
 		file.close();
 		return true;
@@ -391,7 +416,6 @@ private:
 	int m_currentIdx = 0;
 	int m_increment = 1;
 	//std::string m_baseDir = "C:\\Users\\bala\\Documents\\myprojects\\BodyFuViconDataset\\szq\\depth\\";
-	std::string m_3dframes_Dir = "C:\\Users\\bala\\Documents\\myprojects\\Jsonreader\\Dataset\\Yawar\\3d_point_cloud\\";
 	std::string m_file_name;
 	unsigned int m_depthImageWidth =  640 ;
 	unsigned int m_depthImageHeight = 480 ;
@@ -401,10 +425,14 @@ private:
 	//Eigen::Matrix4f m_depthExtrinsics;
 
 	//depth intrinsics param
-	float m_f_x = 576.353f;
-	float m_f_y = 576.057f;
-	float m_c_x = 319.85f;
-	float m_c_y = 240.632f;
+	//float m_f_x = 576.353f;
+	//float m_f_y = 576.057f;
+	//float m_c_x = 319.85f;
+	//float m_c_y = 240.632f;
+	float m_f_x = 554.256f;
+	float m_f_y = 554.256f;
+	float m_c_x = 319.5f;
+	float m_c_y = 239.5f;
 
 	//color intrinsics param
 	float m_col_f_x = 1161.04f;
